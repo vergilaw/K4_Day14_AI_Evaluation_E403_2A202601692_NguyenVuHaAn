@@ -305,19 +305,19 @@ verbosity bias và self-preference bằng cách nào?
 Chỉ làm sau khi hoàn thành 3.1–3.3. Chọn hai framework trong RAGAS, DeepEval
 và TruLens; chạy hoặc thiết kế một so sánh có cùng input dataset.
 
-| Tiêu chí | Framework 1: ____ | Framework 2: ____ |
+| Tiêu chí | Framework 1: RAGAS | Framework 2: DeepEval |
 |---|---|---|
-| Setup complexity | | |
-| Metrics available | | |
-| CI/CD integration | | |
-| Kết quả trên cùng dataset | | |
-| Insight rút ra | | |
+| Setup complexity | Thấp. Dễ dàng import và dùng trực tiếp các metric cơ bản. | Trung bình. Cần cấu hình test cases và tích hợp qua Pytest. |
+| Metrics available | Tập trung vào RAG (Context Recall/Precision, Faithfulness, Relevance). | Rất rộng (RAG, G-Eval, Toxicity, Summarization, Hallucination). |
+| CI/CD integration | Hỗ trợ cơ bản (chạy script Python). | Tích hợp sâu vào Pytest, xuất report đẹp, cực kỳ lý tưởng cho CI/CD. |
+| Kết quả trên cùng dataset | Bắt lỗi khắt khe, Faithfulness thấp do phạt suy luận logic (False Positive). | Nhờ G-Eval, DeepEval có thể nhận diện tốt hơn ý nghĩa ngữ nghĩa thay vì chỉ bắt lỗi từ vựng. |
+| Insight rút ra | Tốt cho việc baseline nhanh hệ thống RAG (PoC). | Tốt cho production vì dễ automate và custom criteria thông qua G-Eval. |
 
-- Scores có nhất quán không?
-- Framework nào strict hơn và vì sao?
-- Hai framework có tìm ra cùng failure cases không?
+- Scores có nhất quán không? Nhìn chung là có, nhất là các metric Retrieval (Recall/Precision). Nhưng Generation metrics thì có sai lệch.
+- Framework nào strict hơn và vì sao? RAGAS strict hơn về Faithfulness. Nó đòi hỏi câu trả lời phải có dấu vết rõ ràng trong text (verbatim hoặc gần đúng). DeepEval (dùng G-Eval) mềm mỏng hơn nếu config criteria cho phép suy luận logic.
+- Hai framework có tìm ra cùng failure cases không? Có, cả hai đều tìm ra các lỗi hiển nhiên (như A01 - Hallucination), nhưng RAGAS báo lỗi sai (False Positive) nhiều hơn ở các case Edge.
 
-> *Phân tích:*
+> *Phân tích:* DeepEval là lựa chọn tốt hơn cho môi trường Enterprise/Production vì khả năng tích hợp CI/CD tự nhiên qua Pytest và khả năng custom LLM judge criteria bằng G-Eval giúp giảm bớt False Positive của RAGAS.
 
 ### Exercise 3.5 — Retrieval Reranking (Bonus +5)
 
@@ -332,20 +332,20 @@ thay đổi Context Recall hay không.
 
 | ID | Recall before | Recall after | Precision before | Precision after | Delta Precision |
 |---|---:|---:|---:|---:|---:|
-| | | | | | |
-| | | | | | |
-| | | | | | |
-| | | | | | |
-| | | | | | |
-| **Avg** | | | | | |
+| H03 | 0.769 | 0.769 | 0.417 | 0.833 | +0.416 |
+| M02 | 0.909 | 0.909 | 0.867 | 1.000 | +0.133 |
+| E02 | 1.000 | 1.000 | 0.950 | 1.000 | +0.050 |
+| M05 | 1.000 | 1.000 | 0.887 | 1.000 | +0.113 |
+| A02 | 0.857 | 0.857 | 0.833 | 0.833 | 0.000 |
+| **Avg** | 0.907 | 0.907 | 0.791 | 0.933 | +0.142 |
 
 **Tại sao Recall dự kiến không đổi?**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Bởi vì Reranking chỉ sắp xếp lại thứ tự (order) của tập chunks ban đầu. Tập hợp (set) các chunks không hề thay đổi, số lượng tài liệu đúng (Gold evidence) được tìm thấy vẫn y như cũ. Recall phụ thuộc vào tập hợp, không phụ thuộc vào thứ tự.
 
 **Khi nào reranking không đủ và cần sửa retriever/query/chunking?**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Reranking vô dụng nếu **Recall thấp** (tức là retriever ban đầu đã lấy sót chunk đúng, ví dụ case M04 bị semantic gap do thiếu từ khóa). Khi Recall thấp, reranker không có tài liệu đúng nào trong Top K để mà đẩy lên đầu. Lúc này phải sửa chunking (để giữ trọn vẹn context) hoặc Query Expansion (để tăng Recall).
 
 ---
 
@@ -366,4 +366,4 @@ Hoàn thành kiểm tra cuối trong khoảng 16:50–17:00.
 - [ ] Exercise 3.3 có rubric 1–5 và bias controls.
 - [ ] `reflection.md` có ba failure analyses và regression strategy.
 - [ ] Đã copy `template.py` thành `solution/solution.py`.
-- [ ] Exercise 3.4 và 3.5 chỉ làm nếu chọn bonus.
+- [x] Exercise 3.4 và 3.5 chỉ làm nếu chọn bonus.
