@@ -30,11 +30,19 @@ critical.
 
 | Metric | Acceptable Low Score Scenario | Critical Low Score Scenario | Action Required |
 |---|---|---|---|
-| Faithfulness | | | |
-| Answer Relevance | | | |
-| Context Recall | | | |
-| Context Precision | | | |
-| Completeness | | | |
+| Faithfulness | 0.6-0.8 có thể tạm chấp nhận với câu trả lời sáng tạo, small talk hoặc nội dung được gắn nhãn rõ là gợi ý, không phải sự thật. | Dưới 0.8 với câu trả lời về chính sách, thanh toán, bảo hành, quyền riêng tư; đặc biệt dưới 0.6 vì answer có nhiều claim không được context hỗ trợ. | Kiểm tra từng claim với context; siết prompt chỉ được dùng evidence, yêu cầu trích nguồn hoặc từ chối khi thiếu evidence. |
+| Answer Relevance | 0.6-0.8 có thể chấp nhận cho câu hỏi mơ hồ khi answer vẫn giải quyết một cách hiểu hợp lý hoặc hỏi lại để làm rõ. | Dưới 0.6 với câu hỏi rõ ràng, hoặc answer lạc đề và không giúp hoàn thành intent của khách hàng. | Phân tích intent, cải thiện prompt/query routing và thêm test cho câu hỏi mơ hồ, nhiều ý. |
+| Context Recall | 0.6-0.8 có thể tạm chấp nhận khi câu hỏi chỉ cần một phần evidence, answer là lời từ chối out-of-scope, hoặc phần thiếu không ảnh hưởng kết luận. | Dưới 0.6 cho câu hỏi factual/multi-document khi các điều kiện hay ngoại lệ bắt buộc không được retrieve. | Cải thiện query rewriting, chunking, embedding và `top_k`; bổ sung tài liệu/evidence bị thiếu rồi chạy lại retrieval eval. |
+| Context Precision | 0.6-0.8 có thể chấp nhận nếu Recall cao, evidence đúng vẫn đứng sớm và generator chịu được một ít chunk dư. | Dưới 0.6 khi phần lớn top results là noise hoặc evidence đúng nằm quá thấp, làm tăng chi phí và nguy cơ trả lời sai. | Điều chỉnh ranking, metadata filter và `top_k`; thêm reranker và kiểm tra Precision@K theo từng nhóm câu hỏi. |
+| Completeness | 0.6-0.8 có thể chấp nhận với câu trả lời chủ ý ngắn gọn, câu hỏi follow-up, hoặc khi phần thiếu chỉ là chi tiết tùy chọn. | Dưới 0.6 khi bỏ sót bước, điều kiện, ngoại lệ hoặc cảnh báo bắt buộc khiến người dùng có thể hành động sai. | Tách expected answer thành các ý bắt buộc; yêu cầu generator kiểm tra đủ ý và bổ sung regression cases cho các ý hay bị bỏ sót. |
+
+**Chẩn đoán theo cặp metric:** Context Recall đo retriever có lấy đủ evidence cần thiết
+hay không, còn Completeness đo answer có bao phủ đủ các ý trong expected answer hay không.
+Vì vậy, Recall thấp đi cùng Completeness thấp thường cho thấy evidence đã bị bỏ sót
+trước khi generator có cơ hội sử dụng, nên retriever là nghi phạm chính. Ngược lại, nếu
+Recall và Precision đều tốt nhưng Faithfulness thấp, context cần thiết đã có và ít noise;
+các claim không được context hỗ trợ nhiều khả năng do generator tự thêm, suy diễn quá mức
+hoặc không tuân thủ grounding prompt.
 
 ### Exercise 1.2 — Bias trong LLM-as-a-Judge
 
@@ -46,15 +54,31 @@ Ba bias thường gặp:
 
 **Câu 1: Thiết kế experiment phát hiện position bias với ít nhất hai conditions.**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Chuẩn bị nhiều cặp answer A/B đã có nhãn chất lượng từ người đánh giá
+> con người. Với mỗi cặp, giữ nguyên question, rubric và nội dung, chỉ thay thứ tự:
+> Condition 1 hiển thị A trước B; Condition 2 hiển thị B trước A. Phân bổ ngẫu nhiên các
+> cặp vào hai condition, ẩn tên model, dùng cùng judge và cấu hình ổn định; có thể lặp lại
+> để ước lượng độ biến thiên. So sánh tỷ lệ answer được chọn trước và sau khi đảo vị trí.
+> Nếu lựa chọn đổi theo vị trí một cách có ý nghĩa (ví dụ A thắng khi đứng đầu nhưng thua
+> khi đứng sau), trong khi nhãn human không đổi, đó là bằng chứng position bias. Báo cáo
+> thêm agreement với human ở từng condition để tránh nhầm bias với chất lượng thật.
 
 **Câu 2: Làm thế nào giảm verbosity bias bằng rubric design?**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Rubric phải chấm theo các claim/ý bắt buộc có evidence thay vì theo độ
+> dài; nêu rõ câu trả lời ngắn nhưng đủ ý được điểm tối đa. Không cộng điểm cho việc nhắc
+> lại câu hỏi, diễn giải trùng lặp hay thêm chi tiết không cần thiết, và trừ điểm cho claim
+> không được hỗ trợ hoặc nội dung làm loãng câu trả lời. Tách điểm accuracy, completeness,
+> relevance và conciseness với mô tả cụ thể cho từng mức để judge không dùng độ dài làm
+> tín hiệu thay thế cho chất lượng.
 
 **Câu 3: Tại sao cần calibrate LLM judge với human labels?**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Human labels là mốc tham chiếu để đo judge có thực sự phản ánh tiêu chuẩn
+> chất lượng và rủi ro của domain hay không. So sánh judge với một tập được nhiều người
+> gán nhãn giúp phát hiện bias, xu hướng quá dễ/quá nghiêm và các loại lỗi judge thường bỏ
+> qua; từ đó chỉnh rubric, prompt và threshold. Nếu không calibrate, CI/CD có thể cho qua
+> lỗi nguy hiểm hoặc chặn release tốt chỉ vì score của judge có vẻ nhất quán nhưng sai lệch.
 
 ### Exercise 1.3 — Evaluation trong CI/CD
 
@@ -62,13 +86,25 @@ Ba bias thường gặp:
 
 | Metric | Threshold | Lý do |
 |---|---:|---|
-| Faithfulness | | |
-| Answer Relevance | | |
-| Completeness | | |
+| Faithfulness | >= 0.85 | Đây là guardrail cao nhất: claim không grounded có thể tạo thông tin sai về chính sách hoặc giao dịch. Bất kỳ case an toàn/chính sách nào dưới ngưỡng cũng block dù average đạt. |
+| Answer Relevance | >= 0.80 | Answer phải giải quyết đúng intent; mức này vẫn cho phép một ít biến thiên diễn đạt nhưng chặn xu hướng lạc đề. |
+| Completeness | >= 0.80 | Bảo đảm phần lớn điều kiện, bước và ngoại lệ bắt buộc được nêu; các ý critical bị thiếu phải block theo per-case rule. |
+
+Deployment chỉ được qua khi cả ba aggregate metric đạt ngưỡng, không có regression đáng
+kể so với baseline và không có critical case thất bại. Ngưỡng cần được hiệu chỉnh bằng
+golden set và human labels; không hạ ngưỡng chỉ để làm pipeline xanh.
 
 **Câu 2: Khi nào dùng offline evaluation, online evaluation và human review?**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Dùng **offline evaluation** trước merge/release và mỗi khi đổi model,
+> prompt, retriever hoặc corpus; chạy trên golden dataset để so sánh có lặp lại với
+> baseline và chặn regression. Dùng **online evaluation** sau deployment trên traffic thật
+> để theo dõi drift, latency, cost, feedback và các intent mà golden set chưa bao phủ; nên
+> lấy mẫu, ẩn danh dữ liệu và có alert/rollback. Dùng **human review** để tạo và calibrate
+> nhãn chuẩn, xử lý case bất đồng hoặc score sát ngưỡng, và duyệt các tình huống high-stakes
+> như thanh toán, privacy, security hay policy exception. Ba hình thức bổ sung cho nhau:
+> offline là gate trước release, online phát hiện vấn đề thực tế, còn human review kiểm
+> chứng các quyết định mà metric tự động chưa đủ tin cậy.
 
 ---
 
